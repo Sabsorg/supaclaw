@@ -43,8 +43,7 @@ alter table po_us_improvements enable row level security;
 
 create index if not exists po_us_improvements_created_at_idx on po_us_improvements (created_at desc);
 
--- Lock down to service_role only
-revoke execute on all functions in schema public from public;
+-- Grant table access to service_role (the identity sequences are implicit with GENERATED ALWAYS)
 grant select, insert, update, delete on po_us_benchmarks to service_role;
 grant select, insert, update, delete on po_us_improvements to service_role;
 grant usage, select on sequence po_us_benchmarks_id_seq to service_role;

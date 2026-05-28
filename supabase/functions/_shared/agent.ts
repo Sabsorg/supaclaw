@@ -267,7 +267,7 @@ export async function runAgent({
       provider: selectedProvider,
       model: resolvedModel,
       durationMs,
-      input: { messages, maxSteps },
+      input: { messages, maxSteps: effectiveMaxSteps },
       request: { body: request.body },
       steps: steps.map((s) => ({
         text: s.text,

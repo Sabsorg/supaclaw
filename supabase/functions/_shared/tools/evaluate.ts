@@ -41,22 +41,23 @@ async function loadBenchmarks(suite?: string): Promise<
     (suite ? o.name === `${suite}.json` : true)
   );
 
-  const results: Array<{ suite: string; benchmarks: BenchmarkDef[] }> = [];
-  for (const obj of jsonFiles) {
-    const path = `${BENCHMARKS_PATH}/${obj.name}`;
-    const file = await downloadFile(path, { optional: true });
-    if (!file) continue;
-    try {
-      const raw = JSON.parse(decodeUtf8(file));
-      if (Array.isArray(raw)) {
-        const suiteName = obj.name.replace(/\.json$/, "");
-        results.push({ suite: suiteName, benchmarks: raw as BenchmarkDef[] });
+  const parsed = await Promise.all(
+    jsonFiles.map(async (obj) => {
+      const path = `${BENCHMARKS_PATH}/${obj.name}`;
+      const file = await downloadFile(path, { optional: true });
+      if (!file) return null;
+      try {
+        const raw = JSON.parse(decodeUtf8(file));
+        if (Array.isArray(raw)) {
+          return { suite: obj.name.replace(/\.json$/, ""), benchmarks: raw as BenchmarkDef[] };
+        }
+      } catch (e) {
+        logger.warn("tool.evaluate.parse_failed", { path, error: String(e) });
       }
-    } catch (e) {
-      logger.warn("tool.evaluate.parse_failed", { path, error: String(e) });
-    }
-  }
-  return results;
+      return null;
+    }),
+  );
+  return parsed.filter((r): r is { suite: string; benchmarks: BenchmarkDef[] } => r !== null);
 }
 
 export const evaluatePoUsTool = tool({
@@ -100,69 +101,67 @@ export const evaluatePoUsTool = tool({
       }
 
       const model = resolveProviderModel("po-us");
-      const summaries: Array<{
-        suite: string;
-        name: string;
-        score: number;
-        matched: string[];
-      }> = [];
 
-      for (const { suite, benchmarks } of suites) {
-        for (const benchmark of benchmarks) {
-          let responseText = "";
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(
-              () => controller.abort(),
-              EVAL_TIMEOUT_MS,
-            );
-            try {
-              const result = await generateText({
-                model,
-                messages: [
-                  {
-                    role: "system",
-                    content:
-                      "You are Po-us. Answer the following question directly and concisely.",
-                  },
-                  { role: "user", content: benchmark.prompt },
-                ],
-                maxSteps: 3,
-                abortSignal: controller.signal,
-              });
-              responseText = result.text;
-            } finally {
-              clearTimeout(timeoutId);
-            }
-          } catch (e) {
-            logger.warn("tool.evaluate.benchmark_failed", {
-              suite,
-              name: benchmark.name,
-              error: String(e),
-            });
-            responseText = "";
-          }
-
-          const { score, matched } = scoreResponse(
-            responseText,
-            benchmark.expected_keywords,
-          );
-          summaries.push({ suite, name: benchmark.name, score, matched });
-
-          // Persist result
-          await supabase.from("po_us_benchmarks").insert({
-            run_label: runLabel,
-            benchmark_suite: suite,
-            benchmark_name: benchmark.name,
-            score,
-            response_text: responseText.slice(0, 2000),
-            matched_keywords: matched,
-            expected_keywords: benchmark.expected_keywords,
-          } as Record<string, unknown>).then(({ error }) => {
-            if (error) {
-              logger.warn("tool.evaluate.insert_failed", { error: error.message });
-            }
+      async function runBenchmark(suite: string, benchmark: BenchmarkDef) {
+        let responseText = "";
+        try {
+          const result = await generateText({
+            model,
+            messages: [
+              {
+                role: "system",
+                content: "You are Po-us. Answer the following question directly and concisely.",
+              },
+              { role: "user", content: benchmark.prompt },
+            ],
+            maxSteps: 3,
+            abortSignal: AbortSignal.timeout(EVAL_TIMEOUT_MS),
           });
+          responseText = result.text;
+        } catch (e) {
+          logger.warn("tool.evaluate.benchmark_failed", {
+            suite,
+            name: benchmark.name,
+            error: String(e),
+          });
+        }
+        const { score, matched } = scoreResponse(responseText, benchmark.expected_keywords);
+        return {
+          suite,
+          name: benchmark.name,
+          score,
+          matched,
+          responseText,
+          expectedKeywords: benchmark.expected_keywords,
+        };
+      }
+
+      // Run all benchmarks in parallel across suites
+      const allBenchmarkTasks = suites.flatMap(({ suite, benchmarks }) =>
+        benchmarks.map((b) => runBenchmark(suite, b))
+      );
+      const results = await Promise.all(allBenchmarkTasks);
+      const summaries = results.map(({ suite, name, score, matched }) => ({
+        suite, name, score, matched,
+      }));
+
+      // Batch-insert all results in one round-trip
+      if (results.length > 0) {
+        const { error: insertErr } = await supabase
+          .from("po_us_benchmarks")
+          .insert(
+            results.map(({ suite, name, score, matched, responseText, expectedKeywords }) => ({
+              run_label: runLabel,
+              benchmark_suite: suite,
+              benchmark_name: name,
+              score,
+              response_text: responseText.slice(0, 2000),
+              matched_keywords: matched,
+              expected_keywords: expectedKeywords,
+            })) as Record<string, unknown>[],
+          );
+        if (insertErr) {
+          logger.warn("tool.evaluate.insert_failed", { error: insertErr.message });
         }
       }
 

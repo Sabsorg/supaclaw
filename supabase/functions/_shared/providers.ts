@@ -35,7 +35,7 @@ export function resolveProviderModel(provider: LLMProvider, model?: string) {
       // Po-us uses Anthropic Opus as its foundation model
       const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
       if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-      return createAnthropic({ apiKey })(model || DEFAULT_MODELS["po-us"]);
+      return createAnthropic({ apiKey })(resolvedModel);
     }
     case "anthropic": {
       const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
