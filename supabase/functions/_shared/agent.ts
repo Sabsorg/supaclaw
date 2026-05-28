@@ -1,9 +1,11 @@
 import { stepCountIs, streamText } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { buildInputMessages, buildSystemPrompt } from "./context.ts";
+import {
+  DEFAULT_MODELS,
+  isLLMProvider,
+  LLMProvider,
+  resolveProviderModel,
+} from "./providers.ts";
 import { createAllTools } from "./tools/index.ts";
 import { getConfigNumber, getConfigString } from "./helpers.ts";
 import { logger } from "./logger.ts";
@@ -12,25 +14,14 @@ import { createServiceClient } from "./supabase.ts";
 import type { Json, Tables } from "./database.types.ts";
 type SessionRow = Tables<"sessions">;
 
+export type { LLMProvider };
+export { DEFAULT_MODELS, isLLMProvider, resolveProviderModel };
+
 export class DuplicateInboundError extends Error {
   constructor(channelUpdateId: string) {
     super(`Duplicate inbound message: ${channelUpdateId}`);
     this.name = "DuplicateInboundError";
   }
-}
-
-export type LLMProvider = "openai" | "anthropic" | "google" | "bedrock";
-
-const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  openai: "gpt-5.2",
-  anthropic: "claude-4-5-opus-latest",
-  google: "gemini-3-flash",
-  bedrock: "us.anthropic.claude-sonnet-4-20250514-v1:0",
-};
-
-function isLLMProvider(value: string): value is LLMProvider {
-  return value === "openai" || value === "anthropic" || value === "google" ||
-    value === "bedrock";
 }
 
 function writeTrace(sessionId: string, trace: Record<string, unknown>) {
@@ -44,43 +35,6 @@ function writeTrace(sessionId: string, trace: Record<string, unknown>) {
   ).catch((err) => logger.warn("agent.trace.upload_failed", { error: err }));
 }
 
-export function resolveProviderModel(provider: LLMProvider, model?: string) {
-  const resolvedModel = model || DEFAULT_MODELS[provider];
-  switch (provider) {
-    case "openai": {
-      const apiKey = Deno.env.get("OPENAI_API_KEY");
-      if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
-      return createOpenAI({ apiKey })(resolvedModel);
-    }
-    case "anthropic": {
-      const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-      if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-      return createAnthropic({ apiKey })(resolvedModel);
-    }
-    case "google": {
-      const apiKey = Deno.env.get("GEMINI_API_KEY");
-      if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
-      return createGoogleGenerativeAI({ apiKey })(resolvedModel);
-    }
-    case "bedrock": {
-      const region = Deno.env.get("AWS_REGION") ?? "us-east-1";
-      const accessKeyId = Deno.env.get("AWS_BEDROCK_ACCESS_KEY");
-      const secretAccessKey = Deno.env.get("AWS_BEDROCK_SECRET_ACCESS_KEY");
-      if (!accessKeyId || !secretAccessKey) {
-        throw new Error(
-          "AWS_BEDROCK_ACCESS_KEY and AWS_BEDROCK_SECRET_ACCESS_KEY must be set",
-        );
-      }
-      return createAmazonBedrock({ region, accessKeyId, secretAccessKey })(
-        resolvedModel,
-      );
-    }
-    default: {
-      const _exhaustive: never = provider;
-      throw new Error(`Unsupported LLM provider: ${_exhaustive}`);
-    }
-  }
-}
 
 export async function runAgent({
   channel,
@@ -119,6 +73,12 @@ export async function runAgent({
   const resolvedModel = selectedModel ?? DEFAULT_MODELS[selectedProvider];
   const startedAt = Date.now();
   const providerModel = resolveProviderModel(selectedProvider, selectedModel);
+
+  // Po-us uses enhanced identity overlay and more reasoning steps
+  const isPoUs = selectedProvider === "po-us";
+  const overlayPath = isPoUs ? ".agents/po-us" : undefined;
+  const agentName = isPoUs ? "Po-us" : undefined;
+  const effectiveMaxSteps = isPoUs ? Math.max(maxSteps, 40) : maxSteps;
 
   let sessionId: string;
   let inboundId: number;
@@ -214,9 +174,9 @@ export async function runAgent({
 
   // 4. Build context and stream
   const messages = includeSessionHistory
-    ? await buildInputMessages({ sessionId })
+    ? await buildInputMessages({ sessionId, overlayPath, agentName })
     : [
-      { role: "system" as const, content: await buildSystemPrompt() },
+      { role: "system" as const, content: await buildSystemPrompt({ overlayPath, agentName }) },
       ...(userMessage ? [{ role: userMessage.role ?? "user", content: userMessage.content }] : []),
     ];
   const toolState = new Map<string, { rowId: number; startedAt: number }>();
@@ -225,7 +185,7 @@ export async function runAgent({
     model: providerModel,
     messages,
     tools: createAllTools(sessionId),
-    stopWhen: stepCountIs(maxSteps),
+    stopWhen: stepCountIs(effectiveMaxSteps),
 
     async onChunk({ chunk }) {
       if (chunk.type === "tool-call") {

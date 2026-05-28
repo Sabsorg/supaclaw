@@ -8,6 +8,8 @@ import { webFetchTool } from "./web_fetch.ts";
 import { webSearchTool } from "./web_search.ts";
 import { createMemorySearchTool } from "./memory_search.ts";
 import { createBashTool } from "./bash.ts";
+import { spawnAgentTool } from "./spawn_agent.ts";
+import { evaluatePoUsTool } from "./evaluate.ts";
 
 export const tools = {
   read_file: readFileTool,
@@ -17,6 +19,8 @@ export const tools = {
   skills: skillsTool,
   web_fetch: webFetchTool,
   web_search: webSearchTool,
+  spawn_agent: spawnAgentTool,
+  evaluate_po_us: evaluatePoUsTool,
 } as const;
 
 export function createAllTools(sessionId: string) {
@@ -79,6 +83,16 @@ const displayRegistry: Record<
   },
   memory_search(args) {
     return str(args.query);
+  },
+  spawn_agent(args) {
+    const prompt = str(args.prompt);
+    const provider = str(args.provider) || "po-us";
+    return `[${provider}] ${prompt.slice(0, 60)}`;
+  },
+  evaluate_po_us(args) {
+    const suite = str(args.suite);
+    const label = str(args.run_label);
+    return suite ? `suite:${suite}${label ? ` (${label})` : ""}` : `all${label ? ` (${label})` : ""}`;
   },
 };
 

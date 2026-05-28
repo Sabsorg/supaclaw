@@ -25,7 +25,12 @@ type TimelineRow = Pick<
   | "tool_error"
 >;
 
-export async function buildSystemPrompt(): Promise<string> {
+export type SystemPromptOptions = {
+  overlayPath?: string;
+  agentName?: string;
+};
+
+export async function buildSystemPrompt(options?: SystemPromptOptions): Promise<string> {
   const readOptionalText = async (path: string) => {
     const file = await downloadFile(path, { optional: true });
     return file ? decodeUtf8(file) : null;
@@ -43,7 +48,8 @@ export async function buildSystemPrompt(): Promise<string> {
     ]);
 
   const parts: string[] = [];
-  parts.push("You are SupaClaw, a cloud-native personal agent.");
+  const agentName = options?.agentName ?? "SupaClaw";
+  parts.push(`You are ${agentName}, a cloud-native personal agent.`);
 
   if (agents?.trim()) {
     parts.push("\n## AGENTS\n" + agents?.trim());
@@ -82,19 +88,41 @@ export async function buildSystemPrompt(): Promise<string> {
     parts.push(skillsBlock);
   }
 
+  // Load agent-specific overlay files (e.g. .agents/po-us/)
+  if (options?.overlayPath) {
+    const [overlaySoul, overlayIdentity, overlayCapabilities] = await Promise.all([
+      readOptionalText(`${options.overlayPath}/SOUL.md`),
+      readOptionalText(`${options.overlayPath}/IDENTITY.md`),
+      readOptionalText(`${options.overlayPath}/CAPABILITIES.md`),
+    ]);
+    if (overlaySoul?.trim()) {
+      parts.push("\n## AGENT SOUL\n" + overlaySoul.trim());
+    }
+    if (overlayIdentity?.trim()) {
+      parts.push("\n## AGENT MISSION\n" + overlayIdentity.trim());
+    }
+    if (overlayCapabilities?.trim()) {
+      parts.push("\n## AGENT CAPABILITIES\n" + overlayCapabilities.trim());
+    }
+  }
+
   return parts.join("\n");
 }
 
 export async function buildInputMessages({
   sessionId,
+  overlayPath,
+  agentName,
 }: {
   sessionId: string;
+  overlayPath?: string;
+  agentName?: string;
 }): Promise<MessageRow[]> {
   const supabase = createServiceClient();
   const latestMessagesCount = getConfigNumber("agent.latest_messages_count") ??
     20;
 
-  const systemPrompt = await buildSystemPrompt();
+  const systemPrompt = await buildSystemPrompt({ overlayPath, agentName });
 
   // Build short chat context (last N messages).
   // Query newest first for index efficiency, then reverse for chronological model input.

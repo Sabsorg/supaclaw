@@ -1,0 +1,32 @@
+[
+  {
+    "name": "fizzbuzz",
+    "prompt": "Write a JavaScript function that returns 'FizzBuzz' for multiples of 15, 'Fizz' for multiples of 3, 'Buzz' for multiples of 5, and the number otherwise. The function should take a number as input.",
+    "expected_keywords": ["function", "fizzbuzz", "fizz", "buzz", "return", "%"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "binary_search",
+    "prompt": "Implement binary search in Python. The function should take a sorted list and a target value, returning the index if found or -1 if not. Include a brief explanation.",
+    "expected_keywords": ["def", "mid", "left", "right", "return", "-1"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "sql_query",
+    "prompt": "Write a SQL query to find the top 3 customers by total order value from a table called 'orders' with columns: customer_id, order_value, order_date.",
+    "expected_keywords": ["select", "group by", "order by", "limit 3", "sum"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "async_typescript",
+    "prompt": "Write a TypeScript async function that fetches a URL, parses the JSON response, and returns it with proper error handling. Use fetch API.",
+    "expected_keywords": ["async", "await", "fetch", "try", "catch", "json"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "regex",
+    "prompt": "Write a regular expression that matches a valid email address format (user@domain.tld). Explain what each part does.",
+    "expected_keywords": ["@", "\\.", "regex", "pattern"],
+    "scoring": "keyword_match"
+  }
+]

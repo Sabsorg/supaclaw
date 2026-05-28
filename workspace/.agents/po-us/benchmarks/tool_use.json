@@ -1,0 +1,32 @@
+[
+  {
+    "name": "file_reasoning",
+    "prompt": "To answer this question, you need to reason about file operations. Given a file at path 'data/config.json' that contains user settings, and you need to update the 'theme' field to 'dark': which tool would you use and what arguments would you pass? Describe the tool call precisely.",
+    "expected_keywords": ["edit_file", "write_file", "path", "config.json", "theme", "dark"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "memory_strategy",
+    "prompt": "A user tells you their favorite programming language is Rust and they prefer dark mode. What should you do to remember this for future sessions? Describe the exact steps and tool calls.",
+    "expected_keywords": ["memory", "write", "rust", "dark", "remember", "store"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "search_strategy",
+    "prompt": "A user asks about today's latest AI news. You don't know the answer from your training. What is the best strategy? Describe which tool(s) to use and why.",
+    "expected_keywords": ["web_search", "current", "search", "latest", "today"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "spawn_strategy",
+    "prompt": "A user asks a complex question that could benefit from getting two independent perspectives before answering. What Po-us capability would you use and how?",
+    "expected_keywords": ["spawn_agent", "sub-agent", "consensus", "parallel", "independent"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "bash_tool",
+    "prompt": "You need to count the number of lines in a large text file stored in the workspace. Which tool would you use and what would the script look like?",
+    "expected_keywords": ["bash", "wc", "wc -l", "lines", "count"],
+    "scoring": "keyword_match"
+  }
+]
