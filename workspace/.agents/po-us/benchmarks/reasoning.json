@@ -1,0 +1,32 @@
+[
+  {
+    "name": "multi_step_logic",
+    "prompt": "There are 5 people: Alice, Bob, Carol, Dave, Eve. Alice is taller than Bob. Carol is shorter than Dave. Eve is taller than Alice. Bob is taller than Carol. Who is the shortest person? Think step by step.",
+    "expected_keywords": ["carol", "shortest"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "causal_chain",
+    "prompt": "If all mammals are warm-blooded, and all dogs are mammals, and Fido is a dog — is Fido warm-blooded? Explain your reasoning.",
+    "expected_keywords": ["yes", "warm-blooded", "fido"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "counterfactual",
+    "prompt": "If the speed of light were half its actual value, what would happen to Einstein's famous equation E=mc²? Be specific about the numerical impact.",
+    "expected_keywords": ["energy", "quarter", "smaller", "reduced", "squared"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "pattern_recognition",
+    "prompt": "What is the next number in this sequence: 2, 6, 12, 20, 30, 42, ? Explain the pattern.",
+    "expected_keywords": ["56", "pattern", "differences"],
+    "scoring": "keyword_match"
+  },
+  {
+    "name": "analogy",
+    "prompt": "Complete the analogy: Doctor is to hospital as teacher is to ___. Explain why.",
+    "expected_keywords": ["school", "classroom"],
+    "scoring": "keyword_match"
+  }
+]
