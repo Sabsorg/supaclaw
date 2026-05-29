@@ -69,7 +69,12 @@ export async function runAgent({
   const selectedProvider = isLLMProvider(resolvedProvider)
     ? resolvedProvider
     : "openai";
-  const selectedModel = model ?? getConfigString("llms.agent.model");
+  // When an explicit provider is passed, only use its own config key — not the
+  // generic "llms.agent.model" which may be a model name for a different provider
+  // (e.g. "gpt-5.2" would be rejected by the Anthropic API for po-us).
+  const selectedModel = model
+    ?? getConfigString(`llms.${selectedProvider}.model`)
+    ?? (provider == null ? getConfigString("llms.agent.model") : undefined);
   const resolvedModel = selectedModel ?? DEFAULT_MODELS[selectedProvider];
   const startedAt = Date.now();
   const providerModel = resolveProviderModel(selectedProvider, selectedModel);
