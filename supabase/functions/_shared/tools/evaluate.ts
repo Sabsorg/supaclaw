@@ -1,4 +1,5 @@
 import { generateText, jsonSchema, tool } from "ai";
+import { buildSystemPrompt } from "../context.ts";
 import { logger } from "../logger.ts";
 import { resolveProviderModel } from "../providers.ts";
 import { createServiceClient } from "../supabase.ts";
@@ -101,6 +102,13 @@ export const evaluatePoUsTool = tool({
       }
 
       const model = resolveProviderModel("po-us");
+      // Load once so all parallel benchmark calls use the same overlay
+      const systemPrompt = await buildSystemPrompt({
+        overlayPath: ".agents/po-us",
+        agentName: "Po-us",
+      }).catch(
+        () => "You are Po-us. Answer the following question directly and concisely.",
+      );
 
       async function runBenchmark(suite: string, benchmark: BenchmarkDef) {
         let responseText = "";
@@ -108,10 +116,7 @@ export const evaluatePoUsTool = tool({
           const result = await generateText({
             model,
             messages: [
-              {
-                role: "system",
-                content: "You are Po-us. Answer the following question directly and concisely.",
-              },
+              { role: "system", content: systemPrompt },
               { role: "user", content: benchmark.prompt },
             ],
             maxSteps: 3,

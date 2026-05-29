@@ -56,14 +56,11 @@ export const spawnAgentTool = tool({
         };
       }
       const selectedProvider = rawProvider as LLMProvider;
-      const isPoUs = selectedProvider === "po-us";
-
       const model = resolveProviderModel(selectedProvider);
-      const baseSystemPrompt = await buildSystemPrompt(
-        isPoUs
-          ? { overlayPath: ".agents/po-us", agentName: "Po-us" }
-          : undefined,
-      ).catch(
+      // Sub-agents are tool-free reasoning workers. Loading the full po-us overlay
+      // (SOUL.md) would instruct the model to call spawn_agent, which isn't registered
+      // here, causing a stuck tool-calls finish reason with empty text.
+      const baseSystemPrompt = await buildSystemPrompt(undefined).catch(
         () =>
           "You are a focused reasoning agent. Complete the task accurately and concisely.",
       );
