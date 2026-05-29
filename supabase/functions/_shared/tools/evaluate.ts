@@ -7,6 +7,25 @@ import { decodeUtf8, downloadFile, listWorkspaceObjects } from "../storage.ts";
 
 const BENCHMARKS_PATH = ".agents/po-us/benchmarks";
 const EVAL_TIMEOUT_MS = 30_000;
+// Anthropic Opus has strict RPM/TPM rate limits; unbounded concurrency triggers
+// 429s that are silently caught and recorded as score 0, corrupting baselines.
+const BENCHMARK_CONCURRENCY = 3;
+
+async function runWithConcurrencyLimit<T>(
+  tasks: Array<() => Promise<T>>,
+  limit: number,
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+  async function worker() {
+    while (next < tasks.length) {
+      const i = next++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
+}
 
 type BenchmarkDef = {
   name: string;
@@ -141,11 +160,11 @@ export const evaluatePoUsTool = tool({
         };
       }
 
-      // Run all benchmarks in parallel across suites
+      // Run benchmarks with a concurrency cap to avoid provider rate-limit 429s
       const allBenchmarkTasks = suites.flatMap(({ suite, benchmarks }) =>
-        benchmarks.map((b) => runBenchmark(suite, b))
+        benchmarks.map((b) => () => runBenchmark(suite, b))
       );
-      const results = await Promise.all(allBenchmarkTasks);
+      const results = await runWithConcurrencyLimit(allBenchmarkTasks, BENCHMARK_CONCURRENCY);
 
       // Batch-insert all results in one round-trip
       if (results.length > 0) {
