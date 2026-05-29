@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import { getConfigString } from "./helpers.ts";
-import { LLMProvider, resolveProviderModel } from "./agent.ts";
+import { isLLMProvider, LLMProvider, resolveProviderModel } from "./providers.ts";
 
 export const OCR_EXTRACTION_PROMPT =
   `Return the plain-text you can read from the image, preserving structure (headings, lists, tables, key/value layout) and natural reading order.
@@ -24,8 +24,11 @@ export async function ocrPageImage(params: {
   imageBytes: Uint8Array;
   mediaType: string;
 }): Promise<string> {
-  const ocrProvider = getConfigString("llms.ocr.provider") ?? "google";
-  const ocrModel = resolveProviderModel(ocrProvider as LLMProvider, getConfigString("llms.ocr.model"));
+  const rawOcrProvider = getConfigString("llms.ocr.provider") ?? "google";
+  // po-us is text-only; fall back to google if an invalid or text-only provider is configured
+  const ocrProvider: LLMProvider =
+    isLLMProvider(rawOcrProvider) && rawOcrProvider !== "po-us" ? rawOcrProvider : "google";
+  const ocrModel = resolveProviderModel(ocrProvider, getConfigString("llms.ocr.model") ?? undefined);
 
   const result = await generateText({
     model: ocrModel,

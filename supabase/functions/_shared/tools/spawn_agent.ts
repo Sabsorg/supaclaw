@@ -74,9 +74,7 @@ export const spawnAgentTool = tool({
         .join("\n\n");
 
       const steps = Math.min(
-        typeof args.max_steps === "number" && args.max_steps > 0
-          ? Math.floor(args.max_steps)
-          : DEFAULT_STEPS,
+        args.max_steps != null && args.max_steps > 0 ? args.max_steps : DEFAULT_STEPS,
         MAX_STEPS,
       );
 

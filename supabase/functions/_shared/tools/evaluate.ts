@@ -146,9 +146,6 @@ export const evaluatePoUsTool = tool({
         benchmarks.map((b) => runBenchmark(suite, b))
       );
       const results = await Promise.all(allBenchmarkTasks);
-      const summaries = results.map(({ suite, name, score, matched }) => ({
-        suite, name, score, matched,
-      }));
 
       // Batch-insert all results in one round-trip
       if (results.length > 0) {
@@ -172,10 +169,10 @@ export const evaluatePoUsTool = tool({
 
       // Aggregate scores by suite
       const bySuite: Record<string, { total: number; count: number }> = {};
-      for (const s of summaries) {
-        if (!bySuite[s.suite]) bySuite[s.suite] = { total: 0, count: 0 };
-        bySuite[s.suite].total += s.score;
-        bySuite[s.suite].count += 1;
+      for (const { suite, score } of results) {
+        if (!bySuite[suite]) bySuite[suite] = { total: 0, count: 0 };
+        bySuite[suite].total += score;
+        bySuite[suite].count += 1;
       }
 
       const suiteScores = Object.fromEntries(
@@ -185,15 +182,14 @@ export const evaluatePoUsTool = tool({
         ]),
       );
 
-      const overallScore = summaries.length > 0
+      const overallScore = results.length > 0
         ? Math.round(
-          (summaries.reduce((sum, s) => sum + s.score, 0) / summaries.length) *
-            1000,
+          (results.reduce((sum, r) => sum + r.score, 0) / results.length) * 1000,
         ) / 1000
         : 0;
 
       logger.debug("tool.evaluate.done", {
-        benchmarkCount: summaries.length,
+        benchmarkCount: results.length,
         overallScore,
         durationMs: Date.now() - startedAt,
       });
@@ -202,12 +198,12 @@ export const evaluatePoUsTool = tool({
         run_label: runLabel,
         overall_score: overallScore,
         suite_scores: suiteScores,
-        benchmark_count: summaries.length,
-        results: summaries.map((s) => ({
-          suite: s.suite,
-          name: s.name,
-          score: s.score,
-          matched_keywords: s.matched,
+        benchmark_count: results.length,
+        results: results.map(({ suite, name, score, matched }) => ({
+          suite,
+          name,
+          score,
+          matched_keywords: matched,
         })),
       };
     } catch (e) {

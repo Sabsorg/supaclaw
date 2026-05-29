@@ -81,9 +81,12 @@ export async function runAgent({
 
   // Po-us uses enhanced identity overlay and more reasoning steps
   const isPoUs = selectedProvider === "po-us";
-  const overlayPath = isPoUs ? ".agents/po-us" : undefined;
+  const overlayPath = isPoUs
+    ? (getConfigString("po_us.identity_path") ?? ".agents/po-us")
+    : undefined;
   const agentName = isPoUs ? "Po-us" : undefined;
-  const effectiveMaxSteps = isPoUs ? Math.max(maxSteps, 40) : maxSteps;
+  const poUsMinSteps = getConfigNumber("po_us.max_steps") ?? 40;
+  const effectiveMaxSteps = isPoUs ? Math.max(maxSteps, poUsMinSteps) : maxSteps;
 
   let sessionId: string;
   let inboundId: number;

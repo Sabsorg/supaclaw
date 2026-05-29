@@ -31,13 +31,9 @@ export function resolveProviderModel(provider: LLMProvider, model?: string) {
       if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
       return createOpenAI({ apiKey })(resolvedModel);
     }
-    case "po-us": {
-      // Po-us uses Anthropic Opus as its foundation model
-      const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-      if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-      return createAnthropic({ apiKey })(resolvedModel);
-    }
+    case "po-us":
     case "anthropic": {
+      // po-us uses Anthropic Opus as its foundation model
       const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
       if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
       return createAnthropic({ apiKey })(resolvedModel);
