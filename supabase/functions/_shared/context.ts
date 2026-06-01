@@ -35,76 +35,46 @@ export async function buildSystemPrompt(options?: SystemPromptOptions): Promise<
     const file = await downloadFile(path, { optional: true });
     return file ? decodeUtf8(file) : null;
   };
-  const [agents, soul, identity, user, bootstrap, heartbeat, tools, memory] =
-    await Promise.all([
-      readOptionalText(".agents/AGENTS.md"),
-      readOptionalText(".agents/SOUL.md"),
-      readOptionalText(".agents/IDENTITY.md"),
-      readOptionalText(".agents/USER.md"),
-      readOptionalText(".agents/BOOTSTRAP.md"),
-      readOptionalText(".agents/HEARTBEAT.md"),
-      readOptionalText(".agents/TOOLS.md"),
-      readOptionalText(".agents/MEMORY.md"),
-    ]);
+  const overlayPath = options?.overlayPath;
+
+  // All I/O launched in one batch — base files, skills block, and overlay files
+  // are all independent so there's no reason to serialize them.
+  const [
+    agents, soul, identity, user, bootstrap, heartbeat, tools, memory,
+    skillsBlock,
+    overlaySoul, overlayIdentity, overlayCapabilities,
+  ] = await Promise.all([
+    readOptionalText(".agents/AGENTS.md"),
+    readOptionalText(".agents/SOUL.md"),
+    readOptionalText(".agents/IDENTITY.md"),
+    readOptionalText(".agents/USER.md"),
+    readOptionalText(".agents/BOOTSTRAP.md"),
+    readOptionalText(".agents/HEARTBEAT.md"),
+    readOptionalText(".agents/TOOLS.md"),
+    readOptionalText(".agents/MEMORY.md"),
+    buildSkillsInstructionsBlock().catch(() => ""),
+    overlayPath ? readOptionalText(`${overlayPath}/SOUL.md`) : Promise.resolve(null),
+    overlayPath ? readOptionalText(`${overlayPath}/IDENTITY.md`) : Promise.resolve(null),
+    overlayPath ? readOptionalText(`${overlayPath}/CAPABILITIES.md`) : Promise.resolve(null),
+  ]);
 
   const parts: string[] = [];
   const agentName = options?.agentName ?? "SupaClaw";
   parts.push(`You are ${agentName}, a cloud-native personal agent.`);
 
-  if (agents?.trim()) {
-    parts.push("\n## AGENTS\n" + agents?.trim());
-  }
+  if (agents?.trim()) parts.push("\n## AGENTS\n" + agents.trim());
+  if (soul?.trim()) parts.push("\n## SOUL\n" + soul.trim());
+  if (identity?.trim()) parts.push("\n## IDENTITY\n" + identity.trim());
+  if (user?.trim()) parts.push("\n## USER\n" + user.trim());
+  if (bootstrap?.trim()) parts.push("\n## BOOTSTRAP\n" + bootstrap.trim());
+  if (heartbeat?.trim()) parts.push("\n## HEARTBEAT\n" + heartbeat.trim());
+  if (memory?.trim()) parts.push("\n## MEMORY (long term from MEMORY.md)\n" + memory.trim());
+  if (tools?.trim()) parts.push("\n## TOOLS\n" + tools.trim());
+  if (skillsBlock?.trim()) parts.push(skillsBlock);
 
-  if (soul?.trim()) {
-    parts.push("\n## SOUL\n" + soul?.trim());
-  }
-
-  if (identity?.trim()) {
-    parts.push("\n## IDENTITY\n" + identity?.trim());
-  }
-
-  if (user?.trim()) {
-    parts.push("\n## USER\n" + user?.trim());
-  }
-
-  if (bootstrap?.trim()) {
-    parts.push("\n## BOOTSTRAP\n" + bootstrap?.trim());
-  }
-
-  if (heartbeat?.trim()) {
-    parts.push("\n## HEARTBEAT\n" + heartbeat?.trim());
-  }
-
-  if (memory?.trim()) {
-    parts.push("\n## MEMORY (long term from MEMORY.md)\n" + memory?.trim());
-  }
-
-  if (tools?.trim()) {
-    parts.push("\n## TOOLS\n" + tools?.trim());
-  }
-
-  const skillsBlock = await buildSkillsInstructionsBlock().catch(() => "");
-  if (skillsBlock.trim()) {
-    parts.push(skillsBlock);
-  }
-
-  // Load agent-specific overlay files (e.g. .agents/po-us/)
-  if (options?.overlayPath) {
-    const [overlaySoul, overlayIdentity, overlayCapabilities] = await Promise.all([
-      readOptionalText(`${options.overlayPath}/SOUL.md`),
-      readOptionalText(`${options.overlayPath}/IDENTITY.md`),
-      readOptionalText(`${options.overlayPath}/CAPABILITIES.md`),
-    ]);
-    if (overlaySoul?.trim()) {
-      parts.push("\n## AGENT SOUL\n" + overlaySoul.trim());
-    }
-    if (overlayIdentity?.trim()) {
-      parts.push("\n## AGENT MISSION\n" + overlayIdentity.trim());
-    }
-    if (overlayCapabilities?.trim()) {
-      parts.push("\n## AGENT CAPABILITIES\n" + overlayCapabilities.trim());
-    }
-  }
+  if (overlaySoul?.trim()) parts.push("\n## AGENT SOUL\n" + overlaySoul.trim());
+  if (overlayIdentity?.trim()) parts.push("\n## AGENT MISSION\n" + overlayIdentity.trim());
+  if (overlayCapabilities?.trim()) parts.push("\n## AGENT CAPABILITIES\n" + overlayCapabilities.trim());
 
   return parts.join("\n");
 }

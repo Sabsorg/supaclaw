@@ -10,6 +10,12 @@ import { logger } from "../_shared/logger.ts";
 const DEVELOPER_CHANNEL = "api" as const;
 const FALLBACK_TEXT = "(no output)";
 
+function assertStageOutput(output: string, stageName: string): void {
+  if (!output.trim() || output === FALLBACK_TEXT || output.startsWith(`[${stageName} failed:`)) {
+    throw new Error(`Stage '${stageName}' produced no usable output — aborting to prevent identity file corruption`);
+  }
+}
+
 function isAuthorized(req: Request): boolean {
   const expected = mustGetEnv("WORKER_SECRET");
   const actual = req.headers.get("x-worker-secret") ?? "";
@@ -33,7 +39,7 @@ async function runDeveloperStage(params: {
       channelChatId,
       userMessage: {
         content: prompt,
-        role: "system",
+        role: "user",
         channelUpdateId: `dev:${runId}:${stageName}`,
       },
       includeSessionHistory: false,
@@ -85,6 +91,7 @@ Deno.serve(async (req) => {
         "Be concise. Return structured results the Gap Analyzer can act on.",
       ].join("\n"),
     });
+    assertStageOutput(evalOutput, "evaluator");
 
     // Stage 2: Gap Analyzer — diagnose weaknesses
     const gapOutput = await runDeveloperStage({
@@ -106,6 +113,7 @@ Deno.serve(async (req) => {
         "Be specific — the Improvement Agent will use your output directly.",
       ].join("\n"),
     });
+    assertStageOutput(gapOutput, "gap_analyzer");
 
     // Stage 3: Improvement Agent — apply changes
     const improveOutput = await runDeveloperStage({

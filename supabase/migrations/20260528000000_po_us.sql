@@ -20,10 +20,16 @@ create table if not exists po_us_benchmarks (
   details jsonb not null default '{}'::jsonb
 );
 
+-- RLS with no policies is intentional: these tables are backend-only.
+-- service_role bypasses RLS; anon/authenticated access is blocked by design.
 alter table po_us_benchmarks enable row level security;
 
 create index if not exists po_us_benchmarks_run_at_idx on po_us_benchmarks (run_at desc);
 create index if not exists po_us_benchmarks_suite_idx on po_us_benchmarks (benchmark_suite);
+-- Supports the primary query pattern: compare label scores per suite over time
+create index if not exists po_us_benchmarks_suite_label_run_idx
+  on po_us_benchmarks (benchmark_suite, run_label, run_at desc);
+create index if not exists po_us_benchmarks_label_idx on po_us_benchmarks (run_label);
 
 -- Audit trail of what the developer agents changed
 create table if not exists po_us_improvements (
@@ -39,6 +45,7 @@ create table if not exists po_us_improvements (
   details jsonb not null default '{}'::jsonb
 );
 
+-- Same intentional lockdown: backend-only, no client-side access needed.
 alter table po_us_improvements enable row level security;
 
 create index if not exists po_us_improvements_created_at_idx on po_us_improvements (created_at desc);

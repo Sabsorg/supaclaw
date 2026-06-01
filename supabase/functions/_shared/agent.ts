@@ -69,16 +69,24 @@ export async function runAgent({
   const selectedProvider = isLLMProvider(resolvedProvider)
     ? resolvedProvider
     : "openai";
-  const selectedModel = model ?? getConfigString("llms.agent.model");
+  // When an explicit provider is passed, only use its own config key — not the
+  // generic "llms.agent.model" which may be a model name for a different provider
+  // (e.g. "gpt-5.2" would be rejected by the Anthropic API for po-us).
+  const selectedModel = model
+    ?? getConfigString(`llms.${selectedProvider}.model`)
+    ?? (provider == null ? getConfigString("llms.agent.model") : undefined);
   const resolvedModel = selectedModel ?? DEFAULT_MODELS[selectedProvider];
   const startedAt = Date.now();
   const providerModel = resolveProviderModel(selectedProvider, selectedModel);
 
   // Po-us uses enhanced identity overlay and more reasoning steps
   const isPoUs = selectedProvider === "po-us";
-  const overlayPath = isPoUs ? ".agents/po-us" : undefined;
+  const overlayPath = isPoUs
+    ? (getConfigString("po_us.identity_path") ?? ".agents/po-us")
+    : undefined;
   const agentName = isPoUs ? "Po-us" : undefined;
-  const effectiveMaxSteps = isPoUs ? Math.max(maxSteps, 40) : maxSteps;
+  const poUsMinSteps = getConfigNumber("po_us.max_steps") ?? 40;
+  const effectiveMaxSteps = isPoUs ? Math.max(maxSteps, poUsMinSteps) : maxSteps;
 
   let sessionId: string;
   let inboundId: number;

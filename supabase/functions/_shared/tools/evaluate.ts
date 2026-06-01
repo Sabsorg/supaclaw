@@ -1,4 +1,5 @@
 import { generateText, jsonSchema, tool } from "ai";
+import { buildSystemPrompt } from "../context.ts";
 import { logger } from "../logger.ts";
 import { resolveProviderModel } from "../providers.ts";
 import { createServiceClient } from "../supabase.ts";
@@ -6,6 +7,25 @@ import { decodeUtf8, downloadFile, listWorkspaceObjects } from "../storage.ts";
 
 const BENCHMARKS_PATH = ".agents/po-us/benchmarks";
 const EVAL_TIMEOUT_MS = 30_000;
+// Anthropic Opus has strict RPM/TPM rate limits; unbounded concurrency triggers
+// 429s that are silently caught and recorded as score 0, corrupting baselines.
+const BENCHMARK_CONCURRENCY = 3;
+
+async function runWithConcurrencyLimit<T>(
+  tasks: Array<() => Promise<T>>,
+  limit: number,
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+  async function worker() {
+    while (next < tasks.length) {
+      const i = next++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
+}
 
 type BenchmarkDef = {
   name: string;
@@ -101,6 +121,13 @@ export const evaluatePoUsTool = tool({
       }
 
       const model = resolveProviderModel("po-us");
+      // Load once so all parallel benchmark calls use the same overlay
+      const systemPrompt = await buildSystemPrompt({
+        overlayPath: ".agents/po-us",
+        agentName: "Po-us",
+      }).catch(
+        () => "You are Po-us. Answer the following question directly and concisely.",
+      );
 
       async function runBenchmark(suite: string, benchmark: BenchmarkDef) {
         let responseText = "";
@@ -108,10 +135,7 @@ export const evaluatePoUsTool = tool({
           const result = await generateText({
             model,
             messages: [
-              {
-                role: "system",
-                content: "You are Po-us. Answer the following question directly and concisely.",
-              },
+              { role: "system", content: systemPrompt },
               { role: "user", content: benchmark.prompt },
             ],
             maxSteps: 3,
@@ -136,14 +160,11 @@ export const evaluatePoUsTool = tool({
         };
       }
 
-      // Run all benchmarks in parallel across suites
+      // Run benchmarks with a concurrency cap to avoid provider rate-limit 429s
       const allBenchmarkTasks = suites.flatMap(({ suite, benchmarks }) =>
-        benchmarks.map((b) => runBenchmark(suite, b))
+        benchmarks.map((b) => () => runBenchmark(suite, b))
       );
-      const results = await Promise.all(allBenchmarkTasks);
-      const summaries = results.map(({ suite, name, score, matched }) => ({
-        suite, name, score, matched,
-      }));
+      const results = await runWithConcurrencyLimit(allBenchmarkTasks, BENCHMARK_CONCURRENCY);
 
       // Batch-insert all results in one round-trip
       if (results.length > 0) {
@@ -167,10 +188,10 @@ export const evaluatePoUsTool = tool({
 
       // Aggregate scores by suite
       const bySuite: Record<string, { total: number; count: number }> = {};
-      for (const s of summaries) {
-        if (!bySuite[s.suite]) bySuite[s.suite] = { total: 0, count: 0 };
-        bySuite[s.suite].total += s.score;
-        bySuite[s.suite].count += 1;
+      for (const { suite, score } of results) {
+        if (!bySuite[suite]) bySuite[suite] = { total: 0, count: 0 };
+        bySuite[suite].total += score;
+        bySuite[suite].count += 1;
       }
 
       const suiteScores = Object.fromEntries(
@@ -180,15 +201,14 @@ export const evaluatePoUsTool = tool({
         ]),
       );
 
-      const overallScore = summaries.length > 0
+      const overallScore = results.length > 0
         ? Math.round(
-          (summaries.reduce((sum, s) => sum + s.score, 0) / summaries.length) *
-            1000,
+          (results.reduce((sum, r) => sum + r.score, 0) / results.length) * 1000,
         ) / 1000
         : 0;
 
       logger.debug("tool.evaluate.done", {
-        benchmarkCount: summaries.length,
+        benchmarkCount: results.length,
         overallScore,
         durationMs: Date.now() - startedAt,
       });
@@ -197,12 +217,12 @@ export const evaluatePoUsTool = tool({
         run_label: runLabel,
         overall_score: overallScore,
         suite_scores: suiteScores,
-        benchmark_count: summaries.length,
-        results: summaries.map((s) => ({
-          suite: s.suite,
-          name: s.name,
-          score: s.score,
-          matched_keywords: s.matched,
+        benchmark_count: results.length,
+        results: results.map(({ suite, name, score, matched }) => ({
+          suite,
+          name,
+          score,
+          matched_keywords: matched,
         })),
       };
     } catch (e) {
