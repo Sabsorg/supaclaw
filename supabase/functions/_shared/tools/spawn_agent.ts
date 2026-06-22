@@ -11,6 +11,8 @@ type SpawnAgentArgs = {
   provider?: string;
   system_context?: string;
   max_steps?: number;
+  overlay_path?: string;
+  agent_name?: string;
 };
 
 export const spawnAgentTool = tool({
@@ -42,6 +44,16 @@ export const spawnAgentTool = tool({
         type: "number",
         description: `Max reasoning steps (default ${DEFAULT_STEPS}, max ${MAX_STEPS}).`,
       },
+      overlay_path: {
+        type: "string",
+        description:
+          "Path to an agent overlay directory (e.g. '.agents/fes-markup') to load its SOUL.md, IDENTITY.md, CAPABILITIES.md.",
+      },
+      agent_name: {
+        type: "string",
+        description:
+          "Display name for the sub-agent (e.g. 'FES Markup Specialist').",
+      },
     },
     required: ["prompt"],
     additionalProperties: false,
@@ -59,9 +71,13 @@ export const spawnAgentTool = tool({
       const isPoUs = selectedProvider === "po-us";
 
       const model = resolveProviderModel(selectedProvider);
+      const resolvedOverlay = args.overlay_path?.trim() ||
+        (isPoUs ? ".agents/po-us" : undefined);
+      const resolvedName = args.agent_name?.trim() ||
+        (isPoUs ? "Po-us" : undefined);
       const baseSystemPrompt = await buildSystemPrompt(
-        isPoUs
-          ? { overlayPath: ".agents/po-us", agentName: "Po-us" }
+        resolvedOverlay
+          ? { overlayPath: resolvedOverlay, agentName: resolvedName }
           : undefined,
       ).catch(
         () =>

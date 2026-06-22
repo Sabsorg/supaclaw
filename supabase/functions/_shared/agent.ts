@@ -45,6 +45,8 @@ export async function runAgent({
   provider,
   model,
   maxSteps = getConfigNumber("agent.max_steps") ?? 25,
+  overlayPath,
+  agentName,
 }: {
   channel: SessionRow["channel"];
   channelChatId: string;
@@ -61,6 +63,8 @@ export async function runAgent({
   provider?: LLMProvider;
   model?: string;
   maxSteps?: number;
+  overlayPath?: string;
+  agentName?: string;
 }) {
   const supabase = createServiceClient();
 
@@ -74,10 +78,10 @@ export async function runAgent({
   const startedAt = Date.now();
   const providerModel = resolveProviderModel(selectedProvider, selectedModel);
 
-  // Po-us uses enhanced identity overlay and more reasoning steps
+  // Resolve agent identity overlay (explicit params take precedence over provider defaults)
   const isPoUs = selectedProvider === "po-us";
-  const overlayPath = isPoUs ? ".agents/po-us" : undefined;
-  const agentName = isPoUs ? "Po-us" : undefined;
+  const resolvedOverlayPath = overlayPath ?? (isPoUs ? ".agents/po-us" : undefined);
+  const resolvedAgentName = agentName ?? (isPoUs ? "Po-us" : undefined);
   const effectiveMaxSteps = isPoUs ? Math.max(maxSteps, 40) : maxSteps;
 
   let sessionId: string;
@@ -174,9 +178,9 @@ export async function runAgent({
 
   // 4. Build context and stream
   const messages = includeSessionHistory
-    ? await buildInputMessages({ sessionId, overlayPath, agentName })
+    ? await buildInputMessages({ sessionId, overlayPath: resolvedOverlayPath, agentName: resolvedAgentName })
     : [
-      { role: "system" as const, content: await buildSystemPrompt({ overlayPath, agentName }) },
+      { role: "system" as const, content: await buildSystemPrompt({ overlayPath: resolvedOverlayPath, agentName: resolvedAgentName }) },
       ...(userMessage ? [{ role: userMessage.role ?? "user", content: userMessage.content }] : []),
     ];
   const toolState = new Map<string, { rowId: number; startedAt: number }>();

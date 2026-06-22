@@ -24,5 +24,8 @@
   "channels.telegram.enabled": true,
   "channels.telegram.show_tool_calls": true,
   "channels.dm.reply_mode": "all",
-  "channels.group.reply_mode": "mention"
+  "channels.group.reply_mode": "mention",
+  "fes.builder_enabled": true,
+  "fes.max_steps": 50,
+  "fes.orchestrator_overlay": ".agents/fes-orchestrator"
 }
